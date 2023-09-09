@@ -16,7 +16,7 @@ async function main() {
             type: 'password',
             name: 'token',
             message: 'Please enter your discord token',
-        },
+        }
     ]);
     token = tokenResponse.token;
     const guildsResponse = await fetch('https://discord.com/api/v10/users/@me/guilds', {
@@ -25,6 +25,7 @@ async function main() {
         },
     });
     guilds = await guildsResponse.json();
+    guilds.push({ name: 'All guilds', id: 'all' }); // Add an option to download all emojis from all guilds
 
     const guildSelectionResponse = await inquirer.prompt([
         {
@@ -32,8 +33,30 @@ async function main() {
             name: 'guild',
             message: 'Please select a guild',
             choices: guilds.map(guild => guild.name),
-        },
+        }
     ]);
+
+    if (guildSelectionResponse.guild === 'All guilds') {
+        for (const guild of guilds) {
+            if (guild.id === 'all') continue;
+            const emojisResponse = await fetch(`https://discord.com/api/v10/guilds/${guild.id}/emojis`, {
+                headers: {
+                    authorization: token,
+                },
+            });
+            emojis = await emojisResponse.json();
+            for (const emoji of emojis) {
+                console.log(`Downloading ${emoji.name}`);
+                await fetch(`https://cdn.discordapp.com/emojis/${emoji.id}.${emoji.animated ? 'gif' : 'png'}`).then(res => {
+                    // need to replace invalid characters in guild name (only a-zA-Z0-9 and space are allowed)
+                    guild.name = guild.name.replace(/[^a-zA-Z0-9 ]/g, '');
+                    const dest = fs.createWriteStream(`./dl/${guild.name}-${emoji.name}.${emoji.animated ? 'gif' : 'png'}`);
+                    res.body.pipe(dest);
+                });
+            }
+        }
+        return;
+    }
 
     const guild = guilds.find(guild => guild.name === guildSelectionResponse.guild);
     const emojisResponse = await fetch(`https://discord.com/api/v10/guilds/${guild.id}/emojis`, {
